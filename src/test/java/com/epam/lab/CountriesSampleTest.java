@@ -1,43 +1,34 @@
 package com.epam.lab;
 
-import io.restassured.RestAssured;
-import io.restassured.builder.RequestSpecBuilder;
-import io.restassured.filter.log.LogDetail;
-import io.restassured.filter.log.RequestLoggingFilter;
-import io.restassured.filter.log.ResponseLoggingFilter;
-import io.restassured.http.ContentType;
 import io.restassured.response.Response;
-import io.restassured.specification.RequestSpecification;
 import org.hamcrest.Matchers;
-import org.testng.annotations.BeforeClass;
+import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
-import static io.restassured.RestAssured.given;
-import static java.net.HttpURLConnection.*;
+import java.util.List;
 
-public class CountriesSampleTest {
+import static io.restassured.RestAssured.given;
+import static java.net.HttpURLConnection.HTTP_OK;
+import static org.hamcrest.MatcherAssert.assertThat;
+
+public class CountriesSampleTest extends BaseSampleTest {
 
     private static final String GET_ALL = "/get/all";
     private static final String GET_ISO_CODE = "/get/iso2code/{alpha2_code}";
 
-    @BeforeClass
-    public void before(){
-        RestAssured.requestSpecification = new RequestSpecBuilder()
-                .setBaseUri("http://services.groupkt.com")
-                .setBasePath("/country")
-                .setContentType(ContentType.ANY)
-                .setAccept(ContentType.ANY)
-                .addFilter(new RequestLoggingFilter(LogDetail.ALL))
-                .addFilter(new ResponseLoggingFilter(LogDetail.ALL))
-                .build();
+    @DataProvider
+    public static Object[][] countries() {
+        return new Object[][]{
+                {"AL", "Alb"},
+                {"WF", "Wallis"},
+                {"UA", "Ukr"}
+        };
     }
 
-    @Test(dataProvider = "")
-    public void checkTotalRecords(String basePath){
+    @Test
+    public void checkTotalRecords() {
 
-        RequestSpecification requestSpecification1 = given().basePath(basePath);
-
-        given().spec(requestSpecification1)
+        given()
                 .when()
                 .get(GET_ALL)
                 .then().log().all()
@@ -45,27 +36,31 @@ public class CountriesSampleTest {
                 .body("RestResponse.messages[0]", Matchers.equalTo("Total [249] records found."))
                 .and().body("RestResponse.result[2].name", Matchers.equalTo("Albania"))
                 .and().body("RestResponse.result.name", Matchers.hasItems("Andorra", "Anguilla"));
-
-
-
     }
 
-    @Test
-    public void checkAlbaniaIsPresent(){
+    @Test (dataProvider = "countries")
+    public void checkCountriesIsPresent(String alfa2code, String countryNameStartsWith) {
 
         Response response = given()
                 .when()
-                .get(GET_ISO_CODE, "AL");
+                .get(GET_ISO_CODE, alfa2code);
 
-                response.then()
-                        .statusCode(HTTP_OK)
-                        .header("Content-Type", "application/json;charset=UTF-8")
-                        .log().all()
-                        .assertThat().body("RestResponse.result.name", Matchers.containsString("Alb"),
-                        "RestResponse.result.alpha2_code", Matchers.equalTo("AL"));
+        response.then()
+                .statusCode(HTTP_OK)
+                .header("Content-Type", "application/json;charset=UTF-8")
+                .assertThat().body("RestResponse.result.name", Matchers.containsString(countryNameStartsWith),
+                "RestResponse.result.alpha2_code", Matchers.equalTo(alfa2code));
+    }
 
+    @Test (dataProvider = "countries")
+    public void checkCountryAsClass(String alfa2code, String countryNameStartsWith) {
 
+        Response response = given().when().get(GET_ISO_CODE, alfa2code);
+        Country country = response.as(RequestResponseWrapper.class).getRestResponse().getCountry();
+        List<String> messages = response.as(RequestResponseWrapper.class).getRestResponse().getMessages();
 
+        assertThat(country.getName(), Matchers.containsString(countryNameStartsWith));
+        assertThat(messages.size(), Matchers.equalTo(1));
     }
 }
 
